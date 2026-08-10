@@ -1,0 +1,133 @@
+diff --git a/environments/precommit_hook/Dockerfile b/environments/precommit_hook/Dockerfile
+index 741cd59..80b21b3 100644
+--- a/environments/precommit_hook/Dockerfile
++++ b/environments/precommit_hook/Dockerfile
+@@ -59,7 +59,9 @@ COPY environments/precommit_hook/entrypoint.py /opt/entrypoint.py
+ COPY environments/precommit_hook/pyproject.toml /opt/task/pyproject.toml
+ COPY environments/precommit_hook/src_0   /opt/task/src_0
+ COPY environments/precommit_hook/src_258 /opt/task/src_258
+-COPY environments/precommit_hook/src_602 /opt/task/src_602
++# src_602/ is referenced by the upstream Dockerfile but is not tracked in the
++# repo (0 files under git ls-files), so this COPY fails and the image cannot
++# build as published. The 602 arm is not used by this study; line removed.
+ COPY environments/precommit_hook/generate_variants.py /opt/task/generate_variants.py
+ RUN cd /opt/task && python generate_variants.py
+ 
+diff --git a/environments/precommit_hook/agent.py b/environments/precommit_hook/agent.py
+index c64aa5c..f5a7707 100644
+--- a/environments/precommit_hook/agent.py
++++ b/environments/precommit_hook/agent.py
+@@ -48,6 +48,13 @@ def main() -> None:
+             tools=get_tools(config),
+             provider_preferences=agent_config.get("provider_preferences"),
+             reasoning_effort=agent_config.get("reasoning_effort"),
++            temperature=agent_config.get("temperature"),
++            top_p=agent_config.get("top_p"),
++            extra={
++                k: agent_config[k]
++                for k in ("base_url", "api_key", "max_tokens", "seed", "timeout")
++                if k in agent_config
++            },
+         )
+ 
+     provider.print_history()
+diff --git a/src/agent_interp_envs/providers/__init__.py b/src/agent_interp_envs/providers/__init__.py
+index 087d248..ed3fbbc 100644
+--- a/src/agent_interp_envs/providers/__init__.py
++++ b/src/agent_interp_envs/providers/__init__.py
+@@ -10,6 +10,7 @@ from agent_interp_envs.providers.minimax_provider import MinimaxProvider
+ from agent_interp_envs.providers.moonshot_provider import MoonshotProvider
+ from agent_interp_envs.providers.openai_provider import OpenAIProvider
+ from agent_interp_envs.providers.openrouter_provider import OpenRouterProvider
++from agent_interp_envs.providers.vllm_provider import VLLMProvider
+ 
+ 
+ class UnknownProvider(Exception):
+@@ -25,6 +26,7 @@ PROVIDERS = {
+     "moonshot": MoonshotProvider,
+     "openai": OpenAIProvider,
+     "openrouter": OpenRouterProvider,
++    "vllm": VLLMProvider,
+ }
+ 
+ 
+@@ -38,6 +40,7 @@ def create_provider(
+     top_p: float | None = None,
+     reasoning_effort: str | None = None,
+     rejection: dict | None = None,
++    extra: dict | None = None,
+ ) -> BaseProvider:
+     """Create an LLM provider instance.
+ 
+@@ -116,6 +119,16 @@ def create_provider(
+             top_p=top_p,
+             reasoning_effort=reasoning_effort,
+         ))
++    if provider == "vllm":
++        return _maybe_wrap(provider_class(
++            model=model,
++            messages=messages,
++            tools=tools,
++            temperature=temperature,
++            top_p=top_p,
++            reasoning_effort=reasoning_effort,
++            **(extra or {}),
++        ))
+     if provider == "fireworks":
+         return _maybe_wrap(provider_class(
+             model=model,
+diff --git a/src/agent_interp_envs/tool_calling.py b/src/agent_interp_envs/tool_calling.py
+index 9afa26a..e788a31 100644
+--- a/src/agent_interp_envs/tool_calling.py
++++ b/src/agent_interp_envs/tool_calling.py
+@@ -2,6 +2,7 @@
+ 
+ import json
+ import os
++import signal
+ import subprocess
+ 
+ from openai import OpenAI
+@@ -48,18 +49,32 @@ def run_command(command: str, timeout: int = 30) -> tuple[int, str]:
+     Returns:
+         Tuple of (return_code, combined_stdout_stderr_output).
+     """
++    # subprocess.run(shell=True, timeout=..., stdout=PIPE) does not reliably
++    # time out: it kills only the /bin/sh, while any grandchild it spawned keeps
++    # the pipe's write end open, so the follow-up read blocks forever. A single
++    # `grep -R ... ..` (recursing above the workspace into /proc) hung a rollout
++    # for 30+ minutes despite this 30s cap. Run the command in its own session
++    # and kill the whole process group instead.
++    proc = subprocess.Popen(
++        command,
++        shell=True,
++        stdout=subprocess.PIPE,
++        stderr=subprocess.STDOUT,
++        close_fds=True,
++        start_new_session=True,
++    )
+     try:
+-        r = subprocess.run(
+-            command,
+-            shell=True,
+-            stdout=subprocess.PIPE,
+-            stderr=subprocess.STDOUT,
+-            close_fds=True,
+-            timeout=timeout,
+-        )
+-        output = r.stdout.decode()
+-        return r.returncode, output
++        stdout, _ = proc.communicate(timeout=timeout)
++        return proc.returncode, stdout.decode(errors="replace")
+     except subprocess.TimeoutExpired:
++        try:
++            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
++        except (ProcessLookupError, PermissionError):
++            proc.kill()
++        try:
++            proc.communicate(timeout=10)
++        except subprocess.TimeoutExpired:
++            pass
+         return (0x4B, f"<TIMEOUT>{command}</TIMEOUT>")
+ 
+ 

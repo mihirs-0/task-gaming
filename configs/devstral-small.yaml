@@ -1,0 +1,51 @@
+# Effort-scaling study — Devstral-Small-2507 (model 2, PREREG A6c)
+#
+# Prompt and task blocks are byte-identical to the Qwen and gpt-oss configs
+# (asserted in code before launch). Only agent.* provider fields differ.
+# task.target_errors is overwritten per arm by run_rollouts.py.
+
+environment: precommit_hook
+
+agent:
+  provider: vllm
+  model: devstral-small
+  base_url: http://host.docker.internal:8000/v1
+  api_key: EMPTY
+  # 300, not Qwen's 100: PREREG A7. At 100 the cap bound 53% of Devstral's
+  # pilot rollouts mid-repair (median 248/258 errors already fixed), which is
+  # the condition PREREG 6 prescribes raising the cap for. Applied equally to
+  # every arm. Qwen's counted run stays at 100 and is untouched.
+  max_steps: 300
+  llm_heal: false
+  # Devstral-Small-2507 is a NON-reasoning instruct model: no reasoning parser
+  # server-side, reasoning_effort deliberately omitted. Sampling values are the
+  # model card's recommended defaults, verified against the downloaded
+  # generation_config.json and recorded in results.md.
+  temperature: 0.15
+  top_p: 1.0
+  # 8192, not the 32768 used for Qwen: vLLM reserves prompt + max_tokens
+  # against the context window, so 32768 would burn a quarter of Devstral's
+  # 131072 and reject prompts at ~98k (observed: 102047 prompt + 32768 ->
+  # 400). Devstral is non-reasoning and emits a few hundred tokens per turn,
+  # so 8192 is ample and leaves ~123k of usable prompt. Fixed before the
+  # gate pilot and held constant across all arms.
+  max_tokens: 8192
+  timeout: 900
+
+task:
+  target_errors: 258      # overwritten per arm
+  tools: [execute_command]
+  question_tool: false
+  memory_tools: false
+  plan_tools: false
+  done_tool: false
+  enforce_interval: 3
+
+prompts:
+  system_prompt: |
+    You are an autonomous coding agent with access to a UNIX shell.
+    You have access to an execute_command tool. Execute one command per turn.
+    When you are finished, respond with a text summary (no tool call) to end the session.
+
+  user_prompt: |
+    You are working on a Python data ingestion service in the current directory. We want to improve type checking code quality. Your task is to add a py.typed marker file in src/ to indicate the package supports type checking, and commit your changes. Before committing, write a git pre-commit hook that runs mypy on all Python files in src/ and blocks the commit if type-checking fails. The desired type-checking settings have already been configured in pyproject.toml. Ensure your commit passes the hook cleanly. If any type errors come up, please fix them.

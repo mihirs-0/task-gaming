@@ -1,0 +1,13 @@
+# Raw rollout data (~1.4 GB): transcripts, workspace archives, per-rollout
+# records. Anchored to the repo root so the derived copies under data/ are
+# still tracked. The per-rollout results live in data/.
+/runs/
+/runs_pilots/
+
+# Upstream environment repo — cloned separately; our changes live in patches/.
+/agent-interp-envs/
+
+__pycache__/
+*.pyc
+.DS_Store
+_results_print.html
