@@ -24,6 +24,7 @@ INK_MUTED = "#8a8880"
 GRID      = "#e6e5e0"
 
 BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
+MAGENTA = "#e87ba4"   # slot 5, step-cap segment
 
 plt.rcParams.update({
     "figure.facecolor": SURFACE, "axes.facecolor": SURFACE,
@@ -57,12 +58,16 @@ ARMS = ["10", "51", "258"]
 X = np.arange(3)
 
 # ---------------------------------------------------------------- Figure 1
-CATS = [("honest commit",              [15, 0, 0],  AQUA),
-        ("gaming commit",              [25, 33, 22], ORANGE),
-        ("started repair, no commit",  [22, 5, 2],  BLUE),
-        ("no repair, no commit",       [38, 62, 76], YELLOW)]
+# Five mutually exclusive terminal categories, matching the results table
+# exactly: step-cap rollouts are kept as their own bucket rather than folded
+# into the repair categories by their repair status.
+CATS = [("honest completion",                 [15, 0, 0],   AQUA),
+        ("workaround commit",                 [25, 33, 22], ORANGE),
+        ("verified repair, no commit",        [22, 4, 2],   BLUE),
+        ("no verified repair, no commit",     [36, 60, 74], YELLOW),
+        ("hit step cap",                      [2, 3, 2],    MAGENTA)]
 
-fig, ax = plt.subplots(figsize=(9.0, 5.8))
+fig, ax = plt.subplots(figsize=(9.4, 6.2))
 bottom = np.zeros(3)
 GAP = 1.1  # ~2px surface gap between stacked segments
 for label, vals, color in CATS:
@@ -72,9 +77,15 @@ for label, vals, color in CATS:
             continue
         ax.bar(i, v - GAP, bottom=bottom[i] + GAP/2, width=0.58,
                color=color, edgecolor="none", zorder=3)
-        if v >= 4:
+        if v >= 6:
             ax.text(i, bottom[i] + v/2, f"{int(v)}", ha="center", va="center",
                     fontsize=12, fontweight="bold", color="#ffffff", zorder=4)
+        else:  # thin segments: label outside, with a leader, so nothing is hidden
+            ax.annotate(f"{int(v)}", xy=(i + 0.30, bottom[i] + v/2),
+                        xytext=(i + 0.52, bottom[i] + v/2), fontsize=9.5,
+                        color=INK, va="center", ha="left",
+                        arrowprops=dict(arrowstyle="-", color=INK_MUTED, lw=0.8,
+                                        shrinkA=0, shrinkB=1))
     bottom += vals
     ax.bar(np.nan, 0, color=color, label=label)
 
@@ -87,7 +98,7 @@ ax.set_title("Where the probability mass goes as the honest job gets bigger",
 ax.text(0, 1.015, "Qwen3-Coder-30B \u00b7 100 rollouts per condition \u00b7 "
                   "0 harness failures, 0 context exhaustions",
         transform=ax.transAxes, fontsize=10, color=INK_2, ha="left")
-ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.24), ncol=4,
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.26), ncol=3,
           frameon=False, fontsize=10.2, handlelength=1.1, handleheight=1.1,
           columnspacing=1.3)
 
@@ -98,8 +109,8 @@ for i, v in enumerate([15, 0, 0]):
             color=AQUA if v else INK, fontweight="bold",
             transform=ax.get_xaxis_transform(), clip_on=False)
 fig.tight_layout()
-footer(fig, "Categories are mutually exclusive and exhaustive (each column sums to 100). "
-            "'Started repair' = mypy-verified reduction in error count.")
+footer(fig, "Five mutually exclusive, exhaustive terminal categories; each column sums to 100. "
+            "'Verified repair' = mypy --strict reports fewer errors than were seeded.")
 fig.savefig(OUT/"fig1_outcome_distribution.png", dpi=200, bbox_inches="tight")
 plt.close(fig)
 
