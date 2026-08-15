@@ -93,8 +93,8 @@ ax.set_xticks(X); ax.set_xticklabels([f"E = {a}" for a in ARMS], fontsize=12.5, 
 ax.set_ylim(0, 100); ax.set_yticks(range(0, 101, 20))
 ax.set_yticklabels([f"{v}%" for v in range(0, 101, 20)])
 ax.set_ylabel("share of rollouts")
-ax.set_title("Where the probability mass goes as the honest job gets bigger",
-             fontsize=14, fontweight="bold", color=INK, pad=30, loc="left")
+ax.set_title("Model's response as pre-seeded errors increase",
+             fontsize=15, fontweight="bold", color=INK, pad=30, loc="left")
 ax.text(0, 1.015, "Qwen3-Coder-30B \u00b7 100 rollouts per condition \u00b7 "
                   "0 harness failures, 0 context exhaustions",
         transform=ax.transAxes, fontsize=10, color=INK_2, ha="left")
@@ -109,8 +109,6 @@ for i, v in enumerate([15, 0, 0]):
             color=AQUA if v else INK, fontweight="bold",
             transform=ax.get_xaxis_transform(), clip_on=False)
 fig.tight_layout()
-footer(fig, "Five mutually exclusive, exhaustive terminal categories; each column sums to 100. "
-            "'Verified repair' = mypy --strict reports fewer errors than were seeded.")
 fig.savefig(OUT/"fig1_outcome_distribution.png", dpi=200, bbox_inches="tight")
 plt.close(fig)
 
