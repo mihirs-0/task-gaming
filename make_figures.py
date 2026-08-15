@@ -233,3 +233,30 @@ plt.close(fig)
 print("wrote:")
 for p in sorted(OUT.glob("*.png")):
     print(f"  {p}  ({p.stat().st_size/1024:.0f} KB)")
+
+# ---------------------------------------------------------------- Figure 6
+# Three payoff framings at E=258. The implicit condition is the main study
+# (no ## Grading section at all); the other two are the A8 arms.
+labels = ["implicit\n(no grading stated)", "stated:\nall-or-nothing", "stated:\npartial credit"]
+verified = [2, 1, 41]
+anyedit  = [6, 3, 56]
+
+fig, ax = plt.subplots(figsize=(7.6, 5.0))
+for i, v in enumerate(verified):
+    rounded_bar(ax, i, 0, v, 0.5, BLUE if i == 2 else "#9dc2ec")
+    ax.text(i, v + 1.6, f"{v}%", ha="center", fontsize=16, fontweight="bold", color=INK)
+ax.set_xticks(range(3)); ax.set_xticklabels(labels, fontsize=11.5, color=INK)
+ax.set_xlim(-0.6, 2.6); ax.set_ylim(0, 50)
+ax.set_yticks(range(0, 51, 10)); ax.set_yticklabels([f"{v}%" for v in range(0, 51, 10)])
+ax.set_ylabel("rollouts that repaired real type errors")
+ax.set_title("Stating the payoff isn't what helps. Stating a proportional one is.",
+             fontsize=14, fontweight="bold", color=INK, pad=28, loc="left")
+ax.text(0, 1.015, "258 seeded errors · 100 rollouts per condition",
+        transform=ax.transAxes, fontsize=10, color=INK_2)
+fig.tight_layout()
+footer(fig, "mypy-verified: the rollout left fewer errors than were seeded. "
+            "The implicit condition is the main study and differs from the stated arms in one "
+            "other respect (step-cap rate 3% vs 17%).")
+fig.savefig(OUT/"fig6_payoff_framing.png", dpi=200, bbox_inches="tight")
+plt.close(fig)
+print("  wrote fig6")
